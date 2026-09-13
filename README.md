@@ -35,7 +35,7 @@ DB_CONFIG = {
 ```bash
 python app.py
 ```
-Visit **http://localhost:5000**
+Visit **https://early-terminal-chairman-consist.trycloudflare.com/**
 
 Click on "Golden Hour", "Neon Dreams", "Static Bloom", "Concrete Verses",
 "Blue Room", "Circuit Dreams", "Midnight Hours", "Open Road", "Firelight",
