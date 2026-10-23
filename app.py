@@ -117,6 +117,9 @@ def logout():
 def me():
     if not current_user_id():
         return jsonify({"logged_in": False})
+    if not query("SELECT user_id FROM Users WHERE user_id = %s", (current_user_id(),)):
+        session.clear()
+        return jsonify({"logged_in": False})
     return jsonify({"logged_in": True, "user_id": session["user_id"], "username": session["username"]})
 
 
@@ -220,6 +223,15 @@ def play_song(song_id):
 # ---------------------------------------------------------
 # PLAYLISTS
 # ---------------------------------------------------------
+def owned_playlist(playlist_id, user_id):
+    rows = query(
+        "SELECT playlist_id, playlist_name FROM Playlists "
+        "WHERE playlist_id = %s AND user_id = %s",
+        (playlist_id, user_id),
+    )
+    return rows[0] if rows else None
+
+
 @app.route("/api/playlists")
 def list_playlists():
     user_id = current_user_id()
@@ -242,16 +254,37 @@ def create_playlist():
     user_id = current_user_id()
     if not user_id:
         return jsonify({"error": "login required"}), 401
-    data = request.get_json(force=True)
+    if not query("SELECT user_id FROM Users WHERE user_id = %s", (user_id,)):
+        app.logger.warning("Playlist creation rejected for stale session user_id=%s", user_id)
+        session.clear()
+        return jsonify({"error": "session expired; please log in again"}), 401
+    data = request.get_json(silent=True) or {}
     name = (data.get("playlist_name") or "").strip()
     if not name:
         return jsonify({"error": "playlist_name is required"}), 400
-    new_id = query(
-        "INSERT INTO Playlists (user_id, playlist_name) VALUES (%s, %s)",
-        (user_id, name),
-        fetch=False,
-    )
+    if len(name) > 100:
+        return jsonify({"error": "playlist name must be 100 characters or fewer"}), 400
+    try:
+        new_id = query(
+            "INSERT INTO Playlists (user_id, playlist_name) VALUES (%s, %s)",
+            (user_id, name),
+            fetch=False,
+        )
+    except mysql.connector.Error:
+        app.logger.exception("Playlist creation failed for user_id=%s", user_id)
+        return jsonify({"error": "playlist could not be created"}), 500
     return jsonify({"ok": True, "playlist_id": new_id, "playlist_name": name}), 201
+
+
+@app.route("/api/playlists/<int:playlist_id>")
+def get_playlist(playlist_id):
+    user_id = current_user_id()
+    if not user_id:
+        return jsonify({"error": "login required"}), 401
+    playlist = owned_playlist(playlist_id, user_id)
+    if not playlist:
+        return jsonify({"error": "playlist not found"}), 404
+    return jsonify(playlist)
 
 
 @app.route("/api/playlists/<int:playlist_id>", methods=["DELETE"])
@@ -259,16 +292,33 @@ def delete_playlist(playlist_id):
     user_id = current_user_id()
     if not user_id:
         return jsonify({"error": "login required"}), 401
-    query(
-        "DELETE FROM Playlists WHERE playlist_id = %s AND user_id = %s",
-        (playlist_id, user_id),
-        fetch=False,
-    )
+    if not owned_playlist(playlist_id, user_id):
+        return jsonify({"error": "playlist not found"}), 404
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM PlaylistSongs WHERE playlist_id = %s", (playlist_id,))
+        cur.execute(
+            "DELETE FROM Playlists WHERE playlist_id = %s AND user_id = %s",
+            (playlist_id, user_id),
+        )
+        conn.commit()
+    except mysql.connector.Error:
+        conn.rollback()
+        return jsonify({"error": "playlist could not be deleted"}), 500
+    finally:
+        cur.close()
+        conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/playlists/<int:playlist_id>/songs")
 def playlist_songs(playlist_id):
+    user_id = current_user_id()
+    if not user_id:
+        return jsonify({"error": "login required"}), 401
+    if not owned_playlist(playlist_id, user_id):
+        return jsonify({"error": "playlist not found"}), 404
     sql = """
         SELECT s.song_id, s.title, s.duration_sec, s.file_url, s.play_count,
                a.artist_id, a.artist_name,
@@ -286,12 +336,17 @@ def playlist_songs(playlist_id):
 
 @app.route("/api/playlists/<int:playlist_id>/songs", methods=["POST"])
 def add_song_to_playlist(playlist_id):
-    if not current_user_id():
+    user_id = current_user_id()
+    if not user_id:
         return jsonify({"error": "login required"}), 401
-    data = request.get_json(force=True)
+    if not owned_playlist(playlist_id, user_id):
+        return jsonify({"error": "playlist not found"}), 404
+    data = request.get_json(silent=True) or {}
     song_id = data.get("song_id")
-    if not song_id:
-        return jsonify({"error": "song_id is required"}), 400
+    if isinstance(song_id, bool) or not isinstance(song_id, int) or song_id <= 0:
+        return jsonify({"error": "song_id must be a positive integer"}), 400
+    if not query("SELECT song_id FROM Songs WHERE song_id = %s", (song_id,)):
+        return jsonify({"error": "song not found"}), 404
     try:
         query(
             "INSERT INTO PlaylistSongs (playlist_id, song_id) VALUES (%s, %s)",
@@ -300,13 +355,23 @@ def add_song_to_playlist(playlist_id):
         )
     except mysql.connector.errors.IntegrityError:
         return jsonify({"error": "song already in playlist"}), 409
-    return jsonify({"ok": True})
+    except mysql.connector.Error:
+        return jsonify({"error": "song could not be added"}), 500
+    return jsonify({"ok": True}), 201
 
 
 @app.route("/api/playlists/<int:playlist_id>/songs/<int:song_id>", methods=["DELETE"])
 def remove_song_from_playlist(playlist_id, song_id):
-    if not current_user_id():
+    user_id = current_user_id()
+    if not user_id:
         return jsonify({"error": "login required"}), 401
+    if not owned_playlist(playlist_id, user_id):
+        return jsonify({"error": "playlist not found"}), 404
+    if not query(
+        "SELECT playlist_id FROM PlaylistSongs WHERE playlist_id = %s AND song_id = %s",
+        (playlist_id, song_id),
+    ):
+        return jsonify({"error": "song is not in playlist"}), 404
     query(
         "DELETE FROM PlaylistSongs WHERE playlist_id = %s AND song_id = %s",
         (playlist_id, song_id),

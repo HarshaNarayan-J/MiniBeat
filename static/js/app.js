@@ -22,6 +22,15 @@ function fmtTime(sec) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function showPlaylistStatus(message, isError = false) {
+  const status = document.getElementById('playlistStatus');
+  status.textContent = message;
+  status.classList.toggle('error', isError);
+  if (message) window.setTimeout(() => {
+    if (status.textContent === message) status.textContent = '';
+  }, 3500);
+}
+
 function songRow(song, opts = {}) {
   const div = document.createElement('div');
   div.className = 'song-row';
@@ -44,7 +53,16 @@ function songRow(song, opts = {}) {
   if (opts.showRemove) {
     div.querySelector('.removeBtn').addEventListener('click', async (e) => {
       e.stopPropagation();
-      await fetch(`/api/playlists/${opts.playlistId}/songs/${song.song_id}`, { method: 'DELETE', credentials: 'same-origin' });
+      const response = await fetch(`/api/playlists/${opts.playlistId}/songs/${song.song_id}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        showPlaylistStatus(data.error || 'Could not remove the song.', true);
+        return;
+      }
+      showPlaylistStatus('Song removed from playlist.');
       openPlaylist(opts.playlistId, opts.playlistName);
       loadPlaylists();
     });
@@ -340,7 +358,11 @@ checkSession();
 // =========================================================
 async function loadPlaylists() {
   const res = await fetch('/api/playlists', { credentials: 'same-origin' });
-  if (!res.ok) return;
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    showPlaylistStatus(data.error || 'Could not load playlists.', true);
+    return [];
+  }
   const playlists = await res.json();
   const container = document.getElementById('playlistList');
   container.innerHTML = '';
@@ -348,10 +370,12 @@ async function loadPlaylists() {
     const row = document.createElement('div');
     row.className = 'playlist-row';
     row.innerHTML = `
-      <span>${p.playlist_name}</span>
-      <span class="pcount">${p.song_count}</span>
+      <span></span>
+      <span class="pcount"></span>
       <button class="delBtn" title="Delete playlist">🗑</button>
     `;
+    row.children[0].textContent = p.playlist_name;
+    row.children[1].textContent = p.song_count;
     row.addEventListener('click', (e) => {
       if (e.target.closest('.delBtn')) return;
       openPlaylist(p.playlist_id, p.playlist_name);
@@ -359,7 +383,16 @@ async function loadPlaylists() {
     row.querySelector('.delBtn').addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!confirm(`Delete playlist "${p.playlist_name}"?`)) return;
-      await fetch(`/api/playlists/${p.playlist_id}`, { method: 'DELETE', credentials: 'same-origin' });
+      const response = await fetch(`/api/playlists/${p.playlist_id}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        showPlaylistStatus(data.error || 'Could not delete playlist.', true);
+        return;
+      }
+      showPlaylistStatus('Playlist deleted.');
       loadPlaylists();
       document.getElementById('playlistView').classList.add('hidden');
     });
@@ -368,26 +401,95 @@ async function loadPlaylists() {
   return playlists;
 }
 
-document.getElementById('newPlaylistBtn').addEventListener('click', () => createPlaylistFlow());
+const playlistDialog = document.getElementById('playlistDialog');
+const playlistForm = document.getElementById('playlistForm');
+const playlistNameInput = document.getElementById('playlistNameInput');
+const playlistDialogError = document.getElementById('playlistDialogError');
+let closePlaylistDialog = null;
 
-async function createPlaylistFlow() {
-  const name = prompt('Name your new playlist:');
-  if (!name || !name.trim()) return null;
+function createPlaylistFlow() {
+  playlistDialogError.classList.add('hidden');
+  playlistNameInput.value = '';
+  playlistDialog.classList.remove('hidden');
+  playlistNameInput.focus();
+  return new Promise((resolve) => {
+    closePlaylistDialog = (result) => {
+      playlistDialog.classList.add('hidden');
+      closePlaylistDialog = null;
+      resolve(result);
+    };
+  });
+}
+
+function cancelPlaylistDialog() {
+  if (closePlaylistDialog) closePlaylistDialog(null);
+}
+
+document.getElementById('newPlaylistBtn').addEventListener('click', () => createPlaylistFlow());
+document.getElementById('playlistDialogClose').addEventListener('click', cancelPlaylistDialog);
+document.getElementById('playlistDialogCancel').addEventListener('click', cancelPlaylistDialog);
+playlistDialog.addEventListener('click', (event) => {
+  if (event.target === playlistDialog) cancelPlaylistDialog();
+});
+
+playlistForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const name = playlistNameInput.value.trim();
+  if (!name) {
+    playlistDialogError.textContent = 'Enter a playlist name.';
+    playlistDialogError.classList.remove('hidden');
+    playlistNameInput.focus();
+    return;
+  }
+  const submit = document.getElementById('playlistDialogSubmit');
+  submit.disabled = true;
   const res = await fetch('/api/playlists', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
-    body: JSON.stringify({ playlist_name: name.trim() }),
+    body: JSON.stringify({ playlist_name: name }),
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
+  submit.disabled = false;
+  if (!res.ok) {
+    playlistDialogError.textContent = data.error || 'Could not create playlist.';
+    playlistDialogError.classList.remove('hidden');
+    if (res.status === 401) {
+      window.setTimeout(() => window.location.reload(), 1200);
+    }
+    return;
+  }
+  if (closePlaylistDialog) closePlaylistDialog(data);
+  showPlaylistStatus('Playlist created.');
   await loadPlaylists();
-  return data;
+});
+
+async function createPlaylistAndAddSong(songId) {
+  const newPl = await createPlaylistFlow();
+  if (!newPl || !newPl.playlist_id) return;
+  const result = await fetch(`/api/playlists/${newPl.playlist_id}/songs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ song_id: songId }),
+  });
+  if (!result.ok) {
+    const data = await result.json().catch(() => ({}));
+    showPlaylistStatus(data.error || 'Could not add the song.', true);
+    return;
+  }
+  showPlaylistStatus('Song added to playlist.');
+  loadPlaylists();
 }
 
 async function openPlaylist(playlistId, playlistName) {
   switchView('home');
   const res = await fetch(`/api/playlists/${playlistId}/songs`, { credentials: 'same-origin' });
   const songs = await res.json();
+  if (!res.ok) {
+    showPlaylistStatus(songs.error || 'Could not load playlist.', true);
+    return;
+  }
   const view = document.getElementById('playlistView');
   view.classList.remove('hidden');
   document.getElementById('playlistViewTitle').textContent = playlistName;
@@ -396,6 +498,9 @@ async function openPlaylist(playlistId, playlistName) {
     playlistId,
     playlistName,
   });
+  if (songs.length === 0) {
+    document.getElementById('playlistViewSongs').textContent = 'This playlist is empty. Add songs with the + button.';
+  }
   view.scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -408,7 +513,12 @@ const atpMenu = document.getElementById('addToPlaylistMenu');
 
 async function openAddToPlaylistMenu(songId, anchorEl) {
   const res = await fetch('/api/playlists', { credentials: 'same-origin' });
-  const playlists = res.ok ? await res.json() : [];
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    showPlaylistStatus(data.error || 'Could not load playlists.', true);
+    return;
+  }
+  const playlists = await res.json();
 
   atpMenu.innerHTML = '';
   if (playlists.length === 0) {
@@ -420,7 +530,9 @@ async function openAddToPlaylistMenu(songId, anchorEl) {
     playlists.forEach(p => {
       const item = document.createElement('div');
       item.className = 'atp-item';
-      item.innerHTML = `<span>${p.playlist_name}</span><span class="dim">${p.song_count}</span>`;
+      item.innerHTML = '<span></span><span class="dim"></span>';
+      item.children[0].textContent = p.playlist_name;
+      item.children[1].textContent = p.song_count;
       item.addEventListener('click', async () => {
         const result = await fetch(`/api/playlists/${p.playlist_id}/songs`, {
           method: 'POST',
@@ -430,8 +542,12 @@ async function openAddToPlaylistMenu(songId, anchorEl) {
         });
         closeAddToPlaylistMenu();
         if (result.status === 409) {
-          alert('That song is already in this playlist.');
+          showPlaylistStatus('That song is already in this playlist.', true);
+        } else if (!result.ok) {
+          const data = await result.json().catch(() => ({}));
+          showPlaylistStatus(data.error || 'Could not add the song.', true);
         } else {
+          showPlaylistStatus('Song added to playlist.');
           loadPlaylists();
         }
       });
@@ -444,16 +560,7 @@ async function openAddToPlaylistMenu(songId, anchorEl) {
   createItem.textContent = '+ Create new playlist';
   createItem.addEventListener('click', async () => {
     closeAddToPlaylistMenu();
-    const newPl = await createPlaylistFlow();
-    if (newPl && newPl.playlist_id) {
-      await fetch(`/api/playlists/${newPl.playlist_id}/songs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ song_id: songId }),
-      });
-      loadPlaylists();
-    }
+    await createPlaylistAndAddSong(songId);
   });
   atpMenu.appendChild(createItem);
 
