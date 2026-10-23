@@ -10,7 +10,7 @@ ALTER TABLE Artists ADD INDEX idx_artist_name (artist_name);
 
 -- ---------------------------------------------------------
 -- Point file_url at real local files.
--- Put your actual mp3s in spotify-clone/static/audio/
+-- Put your actual mp3s in minibeat/static/audio/
 -- and name them to match, e.g. song1.mp3, song2.mp3 ...
 -- Then update the rows, e.g.:
 -- ---------------------------------------------------------

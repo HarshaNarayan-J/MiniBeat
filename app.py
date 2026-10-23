@@ -1,5 +1,5 @@
 """
-Spotify Mini Clone - Flask backend
+MiniBeat - Flask backend
 Run: python app.py
 Requires: pip install flask mysql-connector-python bcrypt
 """
@@ -17,7 +17,7 @@ app.secret_key = "change-this-to-something-random-in-production"
 DB_CONFIG = {
     "host": "localhost",
     "user": "root",       # <-- change to your MySQL username
-    "password": "",   # <-- change to your MySQL password
+    "password": "Harsha@123",   # <-- change to your MySQL password
     "database": "spotify_clone",
 }
 

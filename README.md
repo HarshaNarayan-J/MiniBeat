@@ -1,4 +1,4 @@
-# Spotify Mini Clone — Setup
+# MiniBeat — Setup
 
 This has been fully built, run, and tested end-to-end (backend, database,
 search, recommendations, play tracking, and real audio playback all
@@ -71,4 +71,3 @@ not songs. To swap in real royalty-free music:
   `PlaylistSongs`)
 - Genre filter using `SongGenre`
 - Swap all 50 songs to real music instead of just the 10 demo ones
-
