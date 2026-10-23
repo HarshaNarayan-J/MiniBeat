@@ -47,8 +47,18 @@
         <h3>My Playlists</h3>
         <button id="newPlaylistBtn">+ New</button>
       </div>
+      <div id="playlistStatus" class="playlist-status" role="status"></div>
       <div id="playlistList" class="playlist-list"></div>
     </div>
+
+    <section class="team-members" aria-labelledby="teamMembersHeading">
+      <h3 id="teamMembersHeading">TEAM MEMBERS</h3>
+      <ul>
+        <li>Harsha Narayan J</li>
+        <li>Pradeep C</li>
+        <li>Harsh Mittal</li>
+      </ul>
+    </section>
 
     <!-- user menu pinned to bottom of sidebar -->
     <div class="user-menu" id="userMenu">
@@ -137,6 +147,22 @@
 
 <!-- add-to-playlist popup (positioned dynamically near the clicked + button) -->
 <div id="addToPlaylistMenu" class="add-to-playlist-menu hidden"></div>
+
+<div id="playlistDialog" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="playlistDialogTitle">
+  <form id="playlistForm" class="modal">
+    <div class="modal-header">
+      <h3 id="playlistDialogTitle">Create playlist</h3>
+      <button type="button" id="playlistDialogClose" aria-label="Close">✕</button>
+    </div>
+    <label for="playlistNameInput">Playlist name</label>
+    <input id="playlistNameInput" name="playlist_name" maxlength="100" required autocomplete="off">
+    <div id="playlistDialogError" class="playlist-dialog-error hidden"></div>
+    <div class="modal-actions">
+      <button type="button" id="playlistDialogCancel">Cancel</button>
+      <button type="submit" id="playlistDialogSubmit">Create</button>
+    </div>
+  </form>
+</div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

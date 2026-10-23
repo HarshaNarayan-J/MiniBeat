@@ -12,6 +12,7 @@ body { background: #121212; color: #fff; }
   background: #000;
   padding: 20px;
   flex-shrink: 0;
+  overflow-y: auto;
 }
 
 .logo { margin-bottom: 20px; color: #1db954; }
@@ -99,6 +100,32 @@ body { background: #121212; color: #fff; }
   background: none; border: none; color: #666; cursor: pointer; font-size: 0.9em;
 }
 .playlist-row .delBtn:hover { color: #e22134; }
+.playlist-status { min-height: 18px; color: #1db954; font-size: 0.8em; margin-bottom: 6px; }
+.playlist-status.error, .playlist-dialog-error { color: #ff6b6b; }
+
+/* ---------- Team members ---------- */
+.team-members {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid #222;
+}
+.team-members h3 {
+  margin-bottom: 8px;
+  color: #777;
+  font-size: 0.7em;
+  letter-spacing: 1px;
+}
+.team-members ul {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  list-style: none;
+}
+.team-members li {
+  color: #aaa;
+  font-size: 0.8em;
+  line-height: 1.3;
+}
 
 /* ---------- Add-to-playlist button on song rows ---------- */
 .addBtn {
@@ -327,3 +354,23 @@ body { background: #121212; color: #fff; }
 .atp-item:hover { background: #383838; }
 .atp-item.create-new { color: #1db954; font-weight: 600; border-top: 1px solid #3a3a3a; margin-top: 4px; padding-top: 10px; }
 .atp-empty { padding: 10px 12px; color: #888; font-size: 0.85em; }
+
+#playlistDialog .modal-header h3 { color: #fff; }
+#playlistDialog label { color: #aaa; text-align: left; font-size: 0.9em; }
+#playlistDialog input {
+  padding: 10px; border-radius: 6px; border: 1px solid #333;
+  background: #121212; color: #fff; outline: none;
+}
+#playlistDialog input:focus { border-color: #1db954; }
+#playlistDialogClose, #playlistDialogCancel {
+  background: none; border: 1px solid #444; color: #ccc;
+  border-radius: 16px; padding: 5px 12px; cursor: pointer;
+}
+#playlistDialogClose { border: none; font-size: 1.1em; padding: 2px 6px; }
+#playlistDialogSubmit {
+  background: #1db954; color: #000; border: none; border-radius: 16px;
+  padding: 6px 14px; font-weight: 600; cursor: pointer;
+}
+#playlistDialogSubmit:disabled { opacity: 0.6; cursor: wait; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.playlist-dialog-error { text-align: left; font-size: 0.85em; }
